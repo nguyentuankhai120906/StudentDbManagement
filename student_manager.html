@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quản Lý Sinh Viên — B-Tree</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Sora:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --border: #30363d;
+  --accent: #58a6ff; --green: #3fb950; --red: #f78166;
+  --text: #e6edf3; --muted: #8b949e;
+  --mono: 'JetBrains Mono', monospace; --sans: 'Sora', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; display: flex; flex-direction: column; }
+
+header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 12px 24px; display: flex; align-items: center; gap: 10px;
+}
+header h1 { font-size: 14px; font-weight: 600; }
+#badge { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+.layout { display: grid; grid-template-columns: 320px 1fr; flex: 1; min-height: 0; overflow: hidden; height: calc(100vh - 45px); }
+
+/* LEFT */
+.left { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.panel-title { font-size: 10px; font-weight: 600; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; padding: 10px 16px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+
+.form { padding: 14px 16px; display: flex; flex-direction: column; gap: 9px; flex-shrink: 0; }
+.field label { display: block; font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: 0.5px; margin-bottom: 4px; }
+.field input, .field select {
+  width: 100%; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text); font-family: var(--mono);
+  font-size: 12px; padding: 7px 9px; outline: none; transition: border-color 0.15s;
+}
+.field input:focus, .field select:focus { border-color: var(--accent); }
+.btns { display: flex; gap: 7px; }
+.btn { flex: 1; padding: 8px; border: none; border-radius: 5px; font-family: var(--sans); font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+.btn:hover { opacity: 0.82; }
+.btn-add { background: var(--green); color: #0d1117; }
+.btn-del { background: var(--red); color: #0d1117; }
+.btn-find { background: var(--accent); color: #0d1117; flex: 2; }
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.sep { height: 1px; background: var(--border); }
+
+.table-wrap { flex: 1; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+thead th { background: #1c2333; padding: 7px 9px; text-align: left; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: 0.4px; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
+tbody tr { border-bottom: 1px solid #1a1f27; }
+tbody tr.del { opacity: 0.28; }
+tbody tr.hi td:nth-child(3) { color: var(--accent); font-weight: 700; }
+tbody tr.hi { background: rgba(88,166,255,0.07); }
+td { padding: 6px 9px; }
+.fa { color: var(--green); } .fd { color: var(--red); }
+
+/* RIGHT */
+.right { display: flex; flex-direction: column; overflow: hidden; }
+.tree-area { flex: 1; overflow: auto; padding: 28px; display: flex; align-items: flex-start; justify-content: center; }
+svg#bt { overflow: visible; }
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); gap: 10px; }
+.empty-icon { font-size: 40px; opacity: 0.2; }
+.empty p { font-size: 12px; font-family: var(--mono); }
+
+.log { height: 100px; background: var(--bg); border-top: 1px solid var(--border); overflow-y: auto; padding: 7px 14px; flex-shrink: 0; }
+.log-row { font-family: var(--mono); font-size: 11px; padding: 2px 0; display: flex; gap: 8px; }
+.lt { color: var(--muted); flex-shrink: 0; }
+.lok { color: var(--green); } .lerr { color: var(--red); } .lsrc { color: var(--accent); }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🌲 Quản Lý Sinh Viên — B-Tree Index (Bậc 3)</h1>
+  <span id="badge">0 SV · 0 node</span>
+</header>
+
+<div class="layout">
+  <!-- LEFT PANEL -->
+  <div class="left">
+    <div class="panel-title">Thêm / Xóa Sinh Viên</div>
+    <div class="form">
+      <div class="field"><label>MSSV (Khóa chính)</label><input id="f-id" placeholder="VD: 22521000" /></div>
+      <div class="field"><label>HỌ VÀ TÊN</label><input id="f-name" placeholder="VD: Nguyễn Văn An" /></div>
+      <div class="field"><label>GIỚI TÍNH</label><select id="f-gt"><option>Nam</option><option>Nữ</option></select></div>
+      <div class="field"><label>LỚP</label><input id="f-cls" placeholder="VD: SE21A" /></div>
+      <div class="btns">
+        <button class="btn btn-add" onclick="addSV()">＋ Thêm</button>
+        <button class="btn btn-del" onclick="delSV()">✕ Xóa</button>
+      </div>
+      <div class="sep"></div>
+      <div class="field"><label>TÌM THEO MSSV</label><input id="s-id" placeholder="Nhập MSSV..." onkeydown="if(event.key==='Enter')findSV()" /></div>
+      <div class="btns">
+        <button class="btn btn-find" onclick="findSV()">🔍 Tìm kiếm</button>
+        <button class="btn btn-ghost" onclick="clearFind()">✕</button>
+      </div>
+    </div>
+
+    <div class="panel-title">Bảng Dữ Liệu (data_book.bin)</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>RID</th><th>Flag</th><th>MSSV</th><th>Họ Tên</th><th>GT</th><th>Lớp</th></tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right">
+    <div class="panel-title" style="padding:10px 20px 8px; border-bottom:1px solid var(--border); flex-shrink:0;">
+      Cây B-Tree Bậc 3 (index_book.bin) — tối đa 2 key / node
+    </div>
+    <div class="tree-area" id="ta">
+      <div class="empty" id="emp">
+        <div class="empty-icon">🌲</div>
+        <p>Cây chỉ mục trống — hãy thêm sinh viên</p>
+      </div>
+      <svg id="bt" width="0" height="0"></svg>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════
+// DATA STORE  (mô phỏng data_book.bin)
+// ══════════════════════════════════
+const rows = [];
+let ridCnt = 0;
+
+// ══════════════════════════════════
+// B-TREE BẬC 3  (max 2 key, max 3 con)
+// ══════════════════════════════════
+const MAX = 2;
+
+class BNode {
+  constructor() { this.k = []; this.c = []; this.leaf = true; }
+}
+
+let root = null;
+
+/* Search */
+function bSearch(n, key) {
+  if (!n) return null;
+  const i = n.k.findIndex(x => x.key === key);
+  if (i >= 0) return n.k[i];
+  if (n.leaf) return null;
+  const ci = n.k.filter(x => key > x.key).length;
+  return bSearch(n.c[ci], key);
+}
+
+/* Insert */
+function bInsert(key, rid) {
+  if (!root) { root = new BNode(); root.k = [{key, rid}]; return; }
+  if (root.k.length === MAX) {
+    const nr = new BNode(); nr.leaf = false; nr.c = [root];
+    splitChild(nr, 0); root = nr;
+  }
+  insNF(root, key, rid);
+}
+function insNF(n, key, rid) {
+  let i = n.k.length - 1;
+  if (n.leaf) {
+    while (i >= 0 && key < n.k[i].key) i--;
+    n.k.splice(i + 1, 0, {key, rid});
+  } else {
+    while (i >= 0 && key < n.k[i].key) i--; i++;
+    if (n.c[i].k.length === MAX) { splitChild(n, i); if (key > n.k[i].key) i++; }
+    insNF(n.c[i], key, rid);
+  }
+}
+function splitChild(p, i) {
+  const f = p.c[i], nn = new BNode(); nn.leaf = f.leaf;
+  const mid = Math.floor(MAX / 2), mk = f.k[mid];
+  nn.k = f.k.splice(mid + 1); f.k.splice(mid);
+  if (!f.leaf) nn.c = f.c.splice(mid + 1);
+  p.k.splice(i, 0, mk); p.c.splice(i + 1, 0, nn);
+}
+
+/* Delete */
+function bDelete(key) {
+  if (!root) return false;
+  const ok = delKey(root, key);
+  if (root.k.length === 0 && !root.leaf) root = root.c[0];
+  if (root.k.length === 0 && root.leaf) root = null;
+  return ok;
+}
+function delKey(n, key) {
+  let i = n.k.filter(x => key > x.key).length;
+  if (i < n.k.length && n.k[i].key === key) {
+    if (n.leaf) { n.k.splice(i, 1); return true; }
+    const pred = getPred(n.c[i]);
+    n.k[i] = pred; return delKey(n.c[i], pred.key);
+  }
+  if (n.leaf) return false;
+  const last = (i === n.k.length);
+  if (n.c[i].k.length === 1) fill(n, i);
+  return delKey(last && i > n.k.length ? n.c[i-1] : n.c[i], key);
+}
+function getPred(n) { while (!n.leaf) n = n.c[n.c.length-1]; return n.k[n.k.length-1]; }
+function fill(p, i) {
+  if (i !== 0 && p.c[i-1].k.length > 1) borrow(p, i, true);
+  else if (i !== p.k.length && p.c[i+1].k.length > 1) borrow(p, i, false);
+  else merge(p, i < p.k.length ? i : i-1);
+}
+function borrow(p, i, fromPrev) {
+  if (fromPrev) {
+    const ch = p.c[i], sb = p.c[i-1];
+    ch.k.unshift(p.k[i-1]); p.k[i-1] = sb.k.pop();
+    if (!ch.leaf) ch.c.unshift(sb.c.pop());
+  } else {
+    const ch = p.c[i], sb = p.c[i+1];
+    ch.k.push(p.k[i]); p.k[i] = sb.k.shift();
+    if (!ch.leaf) ch.c.push(sb.c.shift());
+  }
+}
+function merge(p, i) {
+  const l = p.c[i], r = p.c[i+1];
+  l.k.push(p.k[i]); l.k = l.k.concat(r.k);
+  if (!l.leaf) l.c = l.c.concat(r.c);
+  p.k.splice(i, 1); p.c.splice(i+1, 1);
+}
+
+// ══════════════════════════════════
+// ACTIONS
+// ══════════════════════════════════
+let hi = new Set();
+
+function addSV() {
+  const id = document.getElementById('f-id').value.trim();
+  const name = document.getElementById('f-name').value.trim();
+  const gt = document.getElementById('f-gt').value;
+  const cls = document.getElementById('f-cls').value.trim();
+  if (!id || !name) { doLog('err', 'MSSV và Họ tên không được để trống!'); return; }
+  if (rows.some(r => r.id === id && r.flag === 0)) { doLog('err', `MSSV ${id} đã tồn tại!`); return; }
+  const r = ridCnt++;
+  rows.push({ rid: r, flag: 0, id, name, gt, cls });
+  bInsert(id, r);
+  hi = new Set([id]);
+  doLog('ok', `Thêm [RID=${r}] ${id} — ${name} | B-Tree: insert key="${id}"`);
+  refresh(); clearForm();
+}
+
+function delSV() {
+  const id = document.getElementById('f-id').value.trim();
+  if (!id) { doLog('err', 'Nhập MSSV cần xóa!'); return; }
+  const row = rows.find(r => r.id === id && r.flag === 0);
+  if (!row) { doLog('err', `Không tìm thấy MSSV ${id}`); return; }
+  row.flag = 1;
+  bDelete(id);
+  hi = new Set();
+  doLog('ok', `Xóa [RID=${row.rid}] ${id} — ${row.name} | flag→1 (soft delete) | B-Tree: key removed`);
+  refresh();
+}
+
+function findSV() {
+  const id = document.getElementById('s-id').value.trim();
+  if (!id) return;
+  hi = new Set();
+  const found = bSearch(root, id);
+  if (found) {
+    hi.add(found.key);
+    const row = rows.find(r => r.rid === found.rid);
+    doLog('src', `Tìm "${id}" → RID=${found.rid}: ${row?.name} | B-Tree traversal OK ✓`);
+  } else {
+    doLog('err', `Tìm "${id}" → Không tìm thấy`);
+  }
+  refresh();
+}
+
+function clearFind() {
+  document.getElementById('s-id').value = '';
+  hi = new Set(); refresh();
+}
+
+function clearForm() {
+  ['f-id','f-name','f-cls'].forEach(x => document.getElementById(x).value='');
+}
+
+// ══════════════════════════════════
+// RENDER TABLE
+// ══════════════════════════════════
+function renderTable() {
+  const tb = document.getElementById('tb');
+  tb.innerHTML = '';
+  for (const r of rows) {
+    const isHi = hi.has(r.id) && r.flag === 0;
+    const tr = document.createElement('tr');
+    if (r.flag) tr.className = 'del';
+    else if (isHi) tr.className = 'hi';
+    tr.innerHTML = `<td>${r.rid}</td>
+      <td>${r.flag===0 ? '<span class="fa">●</span>' : '<span class="fd">✕</span>'}</td>
+      <td>${r.id}</td><td>${r.name}</td><td>${r.gt}</td><td>${r.cls||'—'}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+// ══════════════════════════════════
+// RENDER B-TREE SVG
+// ══════════════════════════════════
+const NW=104, NH=32, HG=18, VG=54;
+
+function layoutTree(n, depth, li) {
+  if (!n) return li;
+  if (n.leaf) { n._x = li*(NW+HG)+NW/2; n._y = depth; return li+1; }
+  for (const c of n.c) li = layoutTree(c, depth+1, li);
+  n._x = (n.c[0]._x + n.c[n.c.length-1]._x) / 2;
+  n._y = depth; return li;
+}
+
+function allNodes(n, acc=[]) {
+  if (!n) return acc;
+  acc.push(n); n.c.forEach(c => allNodes(c, acc)); return acc;
+}
+
+function renderTree() {
+  const svg = document.getElementById('bt');
+  const emp = document.getElementById('emp');
+  svg.innerHTML = '';
+  if (!root) { svg.style.display='none'; emp.style.display='flex'; updateBadge(); return; }
+  svg.style.display='block'; emp.style.display='none';
+
+  layoutTree(root, 0, 0);
+  const ns = allNodes(root);
+  const W = Math.max(...ns.map(n => n._x + NW/2 + 20));
+  const H = Math.max(...ns.map(n => n._y*(NH+VG) + NH + 22));
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+
+  // edges
+  const drawEdges = n => {
+    if (!n || n.leaf) return;
+    for (const c of n.c) {
+      const x1=n._x, y1=n._y*(NH+VG)+NH, x2=c._x, y2=c._y*(NH+VG), cy=(y1+y2)/2;
+      const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('d',`M${x1},${y1} C${x1},${cy} ${x2},${cy} ${x2},${y2}`);
+      p.setAttribute('stroke','#30363d'); p.setAttribute('stroke-width','1.5'); p.setAttribute('fill','none');
+      svg.appendChild(p); drawEdges(c);
+    }
+  };
+  drawEdges(root);
+
+  // nodes
+  const drawNode = n => {
+    if (!n) return;
+    const x=n._x-NW/2, y=n._y*(NH+VG), kw=NW/n.k.length;
+
+    const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    bg.setAttribute('x',x); bg.setAttribute('y',y);
+    bg.setAttribute('width',NW); bg.setAttribute('height',NH); bg.setAttribute('rx','5');
+    bg.setAttribute('fill','#1c2333');
+    bg.setAttribute('stroke', n.leaf ? '#3fb950' : '#58a6ff');
+    bg.setAttribute('stroke-width','1.5');
+    svg.appendChild(bg);
+
+    for (let i=0; i<n.k.length; i++) {
+      const {key, rid} = n.k[i], isHi = hi.has(key);
+      if (isHi) {
+        const hl = document.createElementNS('http://www.w3.org/2000/svg','rect');
+        hl.setAttribute('x',x+i*kw); hl.setAttribute('y',y);
+        hl.setAttribute('width',kw); hl.setAttribute('height',NH);
+        hl.setAttribute('rx','4'); hl.setAttribute('fill','rgba(88,166,255,0.22)');
+        svg.appendChild(hl);
+      }
+      if (i>0) {
+        const dv = document.createElementNS('http://www.w3.org/2000/svg','line');
+        dv.setAttribute('x1',x+i*kw); dv.setAttribute('y1',y+5);
+        dv.setAttribute('x2',x+i*kw); dv.setAttribute('y2',y+NH-5);
+        dv.setAttribute('stroke','#30363d'); dv.setAttribute('stroke-width','1');
+        svg.appendChild(dv);
+      }
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x', x+i*kw+kw/2); t.setAttribute('y', y+NH/2+1);
+      t.setAttribute('text-anchor','middle'); t.setAttribute('dominant-baseline','middle');
+      t.setAttribute('font-family','JetBrains Mono,monospace');
+      t.setAttribute('font-size','10'); t.setAttribute('font-weight', isHi?'700':'500');
+      t.setAttribute('fill', isHi?'#79c0ff':'#e6edf3');
+      t.textContent = key;
+      svg.appendChild(t);
+    }
+
+    // RID nhỏ bên dưới node lá
+    if (n.leaf) {
+      const rt = document.createElementNS('http://www.w3.org/2000/svg','text');
+      rt.setAttribute('x',n._x); rt.setAttribute('y',y+NH+11);
+      rt.setAttribute('text-anchor','middle');
+      rt.setAttribute('font-family','JetBrains Mono,monospace');
+      rt.setAttribute('font-size','8'); rt.setAttribute('fill','#484f58');
+      rt.textContent = n.k.map(k=>`R${k.rid}`).join(' ');
+      svg.appendChild(rt);
+    }
+
+    n.c.forEach(drawNode);
+  };
+  drawNode(root);
+  updateBadge();
+}
+
+function updateBadge() {
+  const alive = rows.filter(r=>r.flag===0).length;
+  const cnt = n => !n ? 0 : 1 + n.c.reduce((s,c)=>s+cnt(c),0);
+  document.getElementById('badge').textContent = `${alive} SV · ${cnt(root)} node`;
+}
+
+function doLog(type, msg) {
+  const p = document.getElementById('log');
+  const t = new Date().toTimeString().slice(0,8);
+  const icons = {ok:'✓', err:'✗', src:'⌕'};
+  const d = document.createElement('div');
+  d.className = 'log-row';
+  d.innerHTML = `<span class="lt">[${t}]</span><span class="l${type}">${icons[type]} ${msg}</span>`;
+  p.appendChild(d); p.scrollTop = p.scrollHeight;
+}
+
+function refresh() { renderTable(); renderTree(); }
+refresh();
+</script>
+</body>
+</html>
